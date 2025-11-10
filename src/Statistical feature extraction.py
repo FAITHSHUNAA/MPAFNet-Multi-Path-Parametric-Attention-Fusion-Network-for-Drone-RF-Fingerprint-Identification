@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-# ==== 特征提取函数区 ====
+# ==== Feature extraction function ====
 def envelope_mean(signal):
     analytic_signal = hilbert(signal.astype(np.float32))
     return np.mean(np.abs(analytic_signal))
@@ -83,7 +83,7 @@ def extract_features(signal):
         tf_sparsity(signal)
     ]
 
-# ==== 单文件处理函数 ====
+# ==== Single-file processing function ====
 def process_file(input_path, output_path):
     try:
         raw_data = np.loadtxt(input_path, delimiter=',', dtype=np.float32)
@@ -110,7 +110,7 @@ def process_file(input_path, output_path):
     except Exception as e:
         return f"{os.path.basename(input_path)} 失败: {e}"
 
-# ==== 多进程批处理 ====
+# ==== Multi-process batch processing ====
 def process_all_files_parallel(input_dir, output_dir, base_filename, start_index=0, max_index=1000, max_workers=4):
     os.makedirs(output_dir, exist_ok=True)
     print(f"[{datetime.now()}] 开始并行处理...")
@@ -133,13 +133,3 @@ def process_all_files_parallel(input_dir, output_dir, base_filename, start_index
             print(f"[{datetime.now()}] {future.result()}")
 
     print(f"[{datetime.now()}] 所有任务完成，总用时 {time.time() - total_start:.2f} 秒")
-
-# ==== 示例调用 ====
-if __name__ == '__main__':
-    input_folder = r"F:\DroneRF\RF Data_10000_L"
-    output_folder = r"F:\DroneRF"
-    base_file_prefix = "10000L"
-    start_idx = 18
-    end_idx = 18
-
-    process_all_files_parallel(input_folder, output_folder, base_file_prefix, start_idx, end_idx, max_workers=1)
