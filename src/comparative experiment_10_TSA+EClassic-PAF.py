@@ -18,14 +18,14 @@ from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.metrics import ConfusionMatrixDisplay
 import math
 import torch.nn.functional as F
-# 设置随机种子
+# Set the random seed
 torch.manual_seed(42)
 np.random.seed(42)
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
-# 数据集
+# dataset
 class DroneDataset(Dataset):
     def __init__(self, low_csv_files, low_img_dirs, high_csv_files, high_img_dirs, transform=None):
         self.data = []
@@ -35,7 +35,7 @@ class DroneDataset(Dataset):
         self.scaler_high = StandardScaler()
 
         for class_id in range(10):
-            # 低频
+            # low
             df_low = pd.read_csv(low_csv_files[class_id])
             low_features = df_low.iloc[:, :11].values
             labels = df_low.iloc[:, -1].values
@@ -46,7 +46,7 @@ class DroneDataset(Dataset):
                 if f.endswith('.png') or f.endswith('.jpg')
             ], key=natural_sort_key)
 
-            # 高频
+            # high
             df_high = pd.read_csv(high_csv_files[class_id])
             high_features = df_high.iloc[:, :11].values
             high_scaled = self.scaler_high.fit_transform(high_features)
@@ -172,15 +172,13 @@ class MFP(nn.Module):
 
 # DFP
 def round_filters(filters, width_coeff, divisor=8):
-    """按照 EfficientNet 的规则对通道数进行四舍五入，确保是 divisor 的倍数"""
     filters = int(filters * width_coeff)
     new_filters = max(divisor, int(filters + divisor / 2) // divisor * divisor)
-    if new_filters < 0.9 * filters:  # 防止通道数减少过多
+    if new_filters < 0.9 * filters: 
         new_filters += divisor
     return int(new_filters)
 
 def round_repeats(repeats, depth_coeff):
-    """按照 EfficientNet 的规则计算重复次数"""
     return int(math.ceil(depth_coeff * repeats))
 
 class SEBlock(nn.Module):
@@ -241,7 +239,7 @@ class EfficientNet(nn.Module):
     def __init__(self, num_classes=10, width_coeff=1.0, depth_coeff=1.0, dropout_rate=0.2):
         super(EfficientNet, self).__init__()
 
-        # EfficientNet-B0 baseline 配置
+        # EfficientNet-B0 baseline
         base_settings = [
             # (in_channels, out_channels, kernel_size, stride, expand_ratio, repeats)
             (32, 16, 3, 1, 1, 1),
@@ -253,7 +251,6 @@ class EfficientNet(nn.Module):
             (192, 320, 3, 1, 6, 1)
         ]
 
-        # 应用宽度和深度缩放
         scaled_settings = []
         for in_ch, out_ch, k, s, er, r in base_settings:
             in_ch = round_filters(in_ch, width_coeff)
@@ -261,13 +258,11 @@ class EfficientNet(nn.Module):
             r = round_repeats(r, depth_coeff)
             scaled_settings.append((in_ch, out_ch, k, s, er, r))
 
-        # 初始 stem
         out_channels = round_filters(32, width_coeff)
         self.conv1 = nn.Conv2d(3, out_channels, kernel_size=3, stride=2, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.silu = nn.SiLU()
 
-        # 构建 blocks
         blocks = []
         for in_ch, out_ch, k, s, er, r in scaled_settings:
             blocks.append(MBConvBlock(in_ch, out_ch, k, s, er, drop_connect_rate=0.2))
@@ -283,7 +278,7 @@ class EfficientNet(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
         self.fc = nn.Linear(head_channels, num_classes)
 
-        # 初始化权重
+        # Initialize weights
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -308,7 +303,7 @@ class EfficientNet(nn.Module):
         x = self.fc(x)
         return x
 
-# 可学习权重注意力融合
+# Learnable Weight Attention Fusion
 class AttentionFusion(nn.Module):
     def __init__(self, hidden_dim=16, reg_lambda=0.001):
         super(AttentionFusion, self).__init__()
@@ -322,7 +317,7 @@ class AttentionFusion(nn.Module):
         entropy_loss = torch.tensor(0.0, device=p_fused.device)
         return p_fused, self.reg_lambda * entropy_loss
 
-# DPSL 模型
+# DPSL model
 class DPSL(nn.Module):
     def __init__(self):
         super(DPSL, self).__init__()
@@ -342,7 +337,7 @@ class DPSL(nn.Module):
         logits = self.final_fc(p_fused)
         return logits, p_mfp_low, p_dfp_low, p_mfp_high, p_dfp_high, entropy_loss
 
-# 训练函数
+# Training function
 def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=None):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
@@ -408,9 +403,9 @@ def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=Non
         if val_acc > best_acc:
             best_acc = val_acc
             best_f1 = val_f1
-            torch.save(model.state_dict(), best_model_path)  # 保存验证集上表现最好的模型
+            torch.save(model.state_dict(), best_model_path)  # Save the model that performed best on the validation set
 
-    # 保存每一折的训练曲线
+    # Save the training curves for each fold
     if fold is not None:
         plt.figure(figsize=(12,6))
         plt.subplot(1,2,1)
@@ -436,7 +431,7 @@ def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=Non
     return best_acc, best_f1
 
 
-# 测试函数
+# Testing function
 def test_model(model, test_loader, device):
     model.eval()
     preds, trues = [], []
@@ -450,7 +445,6 @@ def test_model(model, test_loader, device):
             logits, _, _, _, _, _ = model(low_feats, low_imgs, high_feats, high_imgs)
             preds.extend(torch.argmax(logits, dim=1).cpu().numpy())
             trues.extend(labels.cpu().numpy())
-            # 无需计算attention，直接填充空的占位符
             attentions.extend([[] for _ in range(len(labels))])
 
     acc = accuracy_score(trues, preds)
@@ -462,7 +456,7 @@ def test_model(model, test_loader, device):
     print(classification_report(trues, preds))
     return preds, trues, attentions
 
-# 可视化注意力权重
+# Visualized attention weights
 def visualize_attention(attentions, output_path='/media/zyj/zuoshun/DroneRF/四路特征/分类+11特征+展示完整训练+MFP优化+上下文优化7+8+训练50轮+10折+固定范围(-10到10)+不缩放attention.png'):
     attentions = np.array(attentions)
     print("Attention Weight Statistics:")
@@ -484,7 +478,7 @@ def main():
     import matplotlib.pyplot as plt
     import os
 
-    # 数据路径
+    # data path
     base_path = '/media/zyj/zuoshun/DroneRF/四路特征'
     low_csv_files = [os.path.join(base_path, f'low_{i}.csv') for i in range(10)]
     high_csv_files = [os.path.join(base_path, f'high_{i}.csv') for i in range(10)]
@@ -536,7 +530,7 @@ def main():
         model = DPSL().to(device)
         train_model(model, fold_train_loader, fold_val_loader, device, num_epochs=50, fold=fold+1)
 
-        # 加载验证集上表现最好的模型
+        # Load the model that performed best on the validation set
         best_model_path = f'/media/zyj/zuoshun/DroneRF/四路特征/分类+11特征+展示完整训练+MFP优化+上下文优化7+8+训练50轮+10折+固定范围(-10到10)+不缩放best_model_fold_{fold+1}.pth'
         model.load_state_dict(torch.load(best_model_path))
 
@@ -576,6 +570,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
