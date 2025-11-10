@@ -22,14 +22,14 @@ import matplotlib.pyplot as plt
 import os
 from sklearn.model_selection import StratifiedKFold
 import torch.nn.functional as F
-# 设置随机种子
+# Set the random seed
 torch.manual_seed(42)
 np.random.seed(42)
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
-# 数据集
+# dataset
 class DroneDataset(Dataset):
     def __init__(self, low_csv_files, high_csv_files):
         self.data = []
@@ -38,13 +38,13 @@ class DroneDataset(Dataset):
         self.scaler_high = StandardScaler()
 
         for class_id in range(10):
-            # 低频
+            # low
             df_low = pd.read_csv(low_csv_files[class_id])
             low_features = df_low.iloc[:, :11].values
             labels = df_low.iloc[:, -1].values
             low_scaled = self.scaler_low.fit_transform(low_features)
 
-            # 高频
+            # high
             df_high = pd.read_csv(high_csv_files[class_id])
             high_features = df_high.iloc[:, :11].values
             high_scaled = self.scaler_high.fit_transform(high_features)
@@ -153,15 +153,15 @@ class MFP(nn.Module):
         final_output = torch.cat(decision_outputs, dim=1)
         return self.fc(final_output)
 
-# 注意力融合
+# Attention fusion
 class AttentionFusion(nn.Module):
     def __init__(self, reg_lambda=0.001):
         super(AttentionFusion, self).__init__()
-        self.alpha_logits = nn.Parameter(torch.tensor([0.0, 0.0]))  # 可训练
+        self.alpha_logits = nn.Parameter(torch.tensor([0.0, 0.0]))  
         self.reg_lambda = reg_lambda
 
     def forward(self, p_mfp_low, p_mfp_high):
-        alpha = torch.softmax(self.alpha_logits, dim=0)  # 确保归一化
+        alpha = torch.softmax(self.alpha_logits, dim=0)  
         p_fused = (
             alpha[0] * p_mfp_low +
             alpha[1] * p_mfp_high
@@ -169,7 +169,7 @@ class AttentionFusion(nn.Module):
         entropy = -torch.sum(alpha * torch.log(alpha + 1e-6))
         return p_fused, self.reg_lambda * entropy
 
-# DPSL 模型
+# DPSL model
 class DPSL(nn.Module):
     def __init__(self):
         super(DPSL, self).__init__()
@@ -185,7 +185,7 @@ class DPSL(nn.Module):
         logits = self.final_fc(p_fused)
         return logits, p_mfp_low, p_mfp_high, entropy_loss
 
-# 训练函数
+# training function
 def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=None):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
@@ -251,9 +251,9 @@ def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=Non
         if val_acc > best_acc:
             best_acc = val_acc
             best_f1 = val_f1
-            torch.save(model.state_dict(), best_model_path)  # 保存验证集上表现最好的模型
+            torch.save(model.state_dict(), best_model_path)  # Save the model that performed best on the validation set
 
-    # 保存每一折的训练曲线
+    # Save the training curves for each fold
     if fold is not None:
         plt.figure(figsize=(12,6))
         plt.subplot(1,2,1)
@@ -279,7 +279,7 @@ def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=Non
     return best_acc, best_f1
 
 
-# 测试函数
+# testing function
 def test_model(model, test_loader, device):
     model.eval()
     preds, trues = [], []
@@ -293,7 +293,6 @@ def test_model(model, test_loader, device):
             logits, _, _, _ = model(low_feats, high_feats)
             preds.extend(torch.argmax(logits, dim=1).cpu().numpy())
             trues.extend(labels.cpu().numpy())
-            # 无需计算attention，直接填充空的占位符
             attentions.extend([[] for _ in range(len(labels))])
 
     acc = accuracy_score(trues, preds)
@@ -306,7 +305,7 @@ def test_model(model, test_loader, device):
     return preds, trues, attentions
 
 def main():
-    # 数据路径
+    # data path
     base_path = '/media/zyj/zuoshun/DroneRF/四路特征'
     low_csv_files = [os.path.join(base_path, f'low_{i}.csv') for i in range(10)]
     high_csv_files = [os.path.join(base_path, f'high_{i}.csv') for i in range(10)]
@@ -348,7 +347,7 @@ def main():
         model = DPSL().to(device)
         train_model(model, fold_train_loader, fold_val_loader, device, num_epochs=50, fold=fold+1)
 
-        # 加载验证集上表现最好的模型
+        # Load the model that performed best on the validation set
         best_model_path = f'/media/zyj/zuoshun/DroneRF/四路特征/分类+11特征+展示完整训练+MFP优化+上下文优化7+8+训练50轮+10折+固定范围(-10到10)+不缩放best_model_fold_{fold+1}.pth'
         model.load_state_dict(torch.load(best_model_path))
 
@@ -389,6 +388,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
