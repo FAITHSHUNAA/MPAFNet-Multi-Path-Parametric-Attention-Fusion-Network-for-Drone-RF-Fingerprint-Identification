@@ -22,14 +22,14 @@ import matplotlib.pyplot as plt
 import os
 from sklearn.model_selection import StratifiedKFold
 import torch.nn.functional as F
-# 设置随机种子
+# Set the random seed
 torch.manual_seed(42)
 np.random.seed(42)
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', s)]
 
-# 数据集
+# dataset
 class DroneDataset(Dataset):
     def __init__(self, high_csv_files):
         self.data = []
@@ -149,7 +149,7 @@ class MFP(nn.Module):
         return self.fc(final_output)
 
 
-# 训练函数
+# training function
 def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=None):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
@@ -213,7 +213,7 @@ def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=Non
             best_f1 = val_f1
             torch.save(model.state_dict(), best_model_path)  # 保存验证集上表现最好的模型
 
-    # 保存每一折的训练曲线
+    # Save the training curves for each fold
     if fold is not None:
         plt.figure(figsize=(12,6))
         plt.subplot(1,2,1)
@@ -239,11 +239,11 @@ def train_model(model, train_loader, val_loader, device, num_epochs=50, fold=Non
     return best_acc, best_f1
 
 
-# 测试函数
+# testing function
 def test_model(model, test_loader, device):
     model.eval()
     preds, trues = [], []
-    attentions = []  # 仍然保留，但不会使用注意力
+    attentions = []  
     with torch.no_grad():
         for high_feats, labels in test_loader:
             high_feats = high_feats.to(device)
@@ -253,7 +253,6 @@ def test_model(model, test_loader, device):
             preds.extend(torch.argmax(logits, dim=1).cpu().numpy())
             trues.extend(labels.cpu().numpy())
 
-            # 无需计算attention，直接填充空的占位符
             attentions.extend([[] for _ in range(len(labels))])
 
     acc = accuracy_score(trues, preds)
@@ -267,7 +266,7 @@ def test_model(model, test_loader, device):
 
 
 def main():
-    # 数据路径
+    # data path
     base_path = '/media/zyj/zuoshun/DroneRF/四路特征'
 
     high_csv_files = [os.path.join(base_path, f'high_{i}.csv') for i in range(10)]
@@ -309,7 +308,7 @@ def main():
         model = MFP().to(device)
         train_model(model, fold_train_loader, fold_val_loader, device, num_epochs=50, fold=fold+1)
 
-        # 加载验证集上表现最好的模型
+        # Load the model that performed best on the validation set
         best_model_path = f'/media/zyj/zuoshun/DroneRF/四路特征/分类+11特征+展示完整训练+MFP优化+上下文优化7+8+训练50轮+10折+固定范围(-10到10)+不缩放best_model_fold_{fold+1}.pth'
         model.load_state_dict(torch.load(best_model_path))
 
@@ -349,6 +348,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
